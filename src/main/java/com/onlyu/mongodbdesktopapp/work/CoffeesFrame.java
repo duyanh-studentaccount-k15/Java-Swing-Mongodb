@@ -33,40 +33,40 @@ package com.onlyu.mongodbdesktopapp.work;
 
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientURI;
+import com.mongodb.MongoCredential;
+import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import lombok.*;
+import org.bson.Document;
 
 import javax.sql.RowSetEvent;
 import javax.sql.RowSetListener;
 import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableModel;
+import javax.swing.table.AbstractTableModel;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.sql.SQLException;
+import java.util.LinkedList;
+import java.util.List;
 
 
-@SuppressWarnings({"unused", "FieldCanBeLocal"})
+@SuppressWarnings({"unused", "FieldCanBeLocal", "unchecked", "rawtypes"})
 public class CoffeesFrame extends JFrame implements RowSetListener {
 
+    private static int countTempRecords = 0;
+    private MongoClient client;
+    private MongoDatabase database;
+    private MongoCollection collection;
+    private MongoCredential credential;
+    private MongoClientURI uri;
     private CoffeesFrame() {
 
         super("The Coffee Break: 'coffee' Table"); // Set window title
         setDefaultLookAndFeelDecorated(true);
 
-        try {
-            String host = System.getenv("DNS_MONGODB");
-            MongoClientURI uri = new MongoClientURI("mongodb://onlyu:kinlove32@" + host + ":27097/?authSource=coffee-shop&ssl=false");
-            mongoClient = new MongoClient(uri);
-            database = mongoClient.getDatabase("coffee-shop");
-            collection = database.getCollection("coffee");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+
 
         // Close connections exit the application when the user
         // closes the window
@@ -74,7 +74,7 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
         addWindowListener(new WindowAdapter() {
             public void windowClosing(WindowEvent e) {
                 try {
-                    mongoClient.close();
+                    client.close();
                 } catch (Exception e1) {
                     e1.printStackTrace();
                 }
@@ -82,7 +82,7 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
             }
         });
 
-        final CoffeeTable table = new CoffeeTable(new CoffeesTableModel()); // Displays the table
+        final JTable table = new JTable(new CoffeesTableModel()); // Displays the table
 
         label_COF_NAME = new JLabel();
         label_SUP_ID = new JLabel();
@@ -252,79 +252,104 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
 
         // Add listeners for the buttons in the application
 
-        button_ADD_ROW.addActionListener(new ActionListener() {
+        button_ADD_ROW.addActionListener(e -> {
 
-            public void actionPerformed(ActionEvent e) {
-
-                JOptionPane.showMessageDialog(CoffeesFrame.this,
-                        new String[]{
-                                "Adding the following row:",
-                                "Coffee name: [" + textField_COF_NAME.getText() + "]",
-                                "Supplier ID: [" + textField_SUP_ID.getText() + "]",
-                                "Price: [" + textField_PRICE.getText() + "]",
-                                "Sales: [" + textField_SALES.getText() + "]",
-                                "Total: [" + textField_TOTAL.getText() + "]"});
+            JOptionPane.showMessageDialog(CoffeesFrame.this,
+                    new String[]{
+                            "Adding the following row:",
+                            "Coffee name: [" + textField_COF_NAME.getText() + "]",
+                            "Supplier ID: [" + textField_SUP_ID.getText() + "]",
+                            "Price: [" + textField_PRICE.getText() + "]",
+                            "Sales: [" + textField_SALES.getText() + "]",
+                            "Total: [" + textField_TOTAL.getText() + "]"});
 
 
-                try {
+            try {
 
-                    table.getModel().insertRow(textField_COF_NAME.getText(),
-                            Integer.parseInt(textField_SUP_ID.getText().trim()),
-                            Double.parseDouble(textField_PRICE.getText().trim()),
-                            Integer.parseInt(textField_SALES.getText().trim()),
-                            Double.parseDouble(textField_TOTAL.getText().trim()));
-                } catch (Exception e1) {
-                    e1.printStackTrace();
+                CoffeesTableModel model = (CoffeesTableModel) table.getModel();
+                model.insertRow(textField_COF_NAME.getText().trim(),
+                        textField_SUP_ID.getText().trim(),
+                        textField_PRICE.getText().trim(),
+                        textField_SALES.getText().trim(),
+                        textField_TOTAL.getText().trim());
+                countTempRecords += 1;
+
+            } catch (Exception e1) {
+                displaySQLExceptionDialog(e1);
+            }
+        });
+
+        button_UPDATE_DATABASE.addActionListener(e -> {
+            try {
+                //Thread.sleep(1);
+                CoffeesTableModel model = (CoffeesTableModel) table.getModel();
+                List<Coffee> data = model.getData();
+                int numOfRecords = data.size();
+                List<Document> documents = new LinkedList<>();
+                for (int i = numOfRecords - countTempRecords; i < numOfRecords; i++)
+                    documents.add(toDocument(data.get(i)));
+                collection.insertMany(documents);
+                countTempRecords = 0; // reset
+                JOptionPane.showMessageDialog(this, "Insert success!", "Success!", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception e1) {
+                table.setModel(new CoffeesTableModel());
+                displaySQLExceptionDialog(e1);
+            }
+        });
+
+        button_DISCARD_CHANGES.addActionListener(e -> {
+            try {
+                table.setModel(new CoffeesTableModel());
+                countTempRecords = 0;
+            } catch (Exception e1) {
+                displaySQLExceptionDialog(e1);
+            }
+        });
+    }
+
+    private static Coffee toCoffee(Document document) {
+        return new Coffee(
+                document.getString("name"),
+                document.getInteger("supId"),
+                document.getDouble("price"),
+                document.getInteger("sales"),
+                document.getInteger("total")
+        );
+    }
+
+    private static Document toDocument(Coffee coffee) {
+        return new Document()
+                .append("name", coffee.name)
+                .append("supId", coffee.supId)
+                .append("price", coffee.price)
+                .append("sales", coffee.sales)
+                .append("total", coffee.total)
+                ;
+    }
+
+    @Override
+    public void rowSetChanged(RowSetEvent event) {
+
+    }
+
+    @Override
+    public void rowChanged(RowSetEvent event) {
+
+    }
+
+    private void displaySQLExceptionDialog(Exception e) {
+
+        // Display the SQLException in a dialog box
+        JOptionPane.showMessageDialog(
+                CoffeesFrame.this,
+                new String[]{
+                        e.getClass().getName() + ": ",
+                        e.getMessage()
                 }
-            }
-        });
-
-        button_UPDATE_DATABASE.addActionListener(new ActionListener() {
-
-            public void actionPerformed(ActionEvent e) {
-//          try {
-//            //myCoffeesTableModel.coffeesRowSet.acceptChanges();
-//          } catch (SQLException sqle) {
-//            displaySQLExceptionDialog(sqle);
-//            // Now revert back changes
-//            try {
-//              createNewTableModel();
-//            } catch (SQLException sqle2) {
-//              displaySQLExceptionDialog(sqle2);
-//            }
-//          }
-            }
-        });
-
-        button_DISCARD_CHANGES.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-//                try {
-//                    createNewTableModel();
-//                } catch (SQLException sqle) {
-//                    displaySQLExceptionDialog(sqle);
-//                }
-            }
-        });
+        );
     }
 
-    @Getter
-    @Setter
-    @AllArgsConstructor
-    @NoArgsConstructor
-    @ToString
-    private class Coffee {
 
-        private String name;
-        private int supId;
-        private double price;
-        private int sales;
-        private double total;
-
-    }
-
-    private MongoClient mongoClient;
-    private MongoDatabase database;
-    private MongoCollection collection;
     private JTable table; // The table for displaying data
     private JLabel label_COF_NAME;
     private JLabel label_SUP_ID;
@@ -340,75 +365,18 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
     private JButton button_UPDATE_DATABASE;
     private JButton button_DISCARD_CHANGES;
 
-    @SuppressWarnings({"unused", "FieldCanBeLocal"})
     @Getter
-    private class CoffeesTableModel extends DefaultTableModel {
+    @Setter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @ToString
+    private static class Coffee {
 
-        private boolean DEBUG = false;
-        private String[] columnNames = {"COF_NAME", "SUP_ID", "PRICE", "SALES", "TOTAL"};
-
-        private Object[][] data = {
-//                {"Colombian", 101, 7.99, 0, 0},
-//                {"Colombian_Decaf", 101, 8.99, 0, 0},
-//                {"Espresso", 150, 9.99, 0, 0},
-//                {"French_Roast", 49, 8.99, 0, 0},
-//                {"French_Roast_Decaf", 49, 9.99, 0, 0}
-        };
-
-        public void insertRow(String name, int supId, double price, int sales, double total) {
-            data[getRowCount()][0] = name;
-            data[getRowCount()][1] = supId;
-            data[getRowCount()][2] = price;
-            data[getRowCount()][3] = sales;
-            data[getRowCount()][4] = total;
-            for (int i = 0; i < 5; i++) {
-                fireTableCellUpdated(getRowCount(), i);
-            }
-        }
-
-        public void insertRow(Coffee coffee) {
-            setValueAt(coffee.getName(), getRowCount(), 0);
-            setValueAt(coffee.getSupId(), getRowCount(), 1);
-            setValueAt(coffee.getPrice(), getRowCount(), 2);
-            setValueAt(coffee.getSales(), getRowCount(), 3);
-            setValueAt(coffee.getTotal(), getRowCount(), 4);
-        }
-
-        @Override
-        public boolean isCellEditable(int row, int col) {
-            return col >= 2;
-        }
-
-        @Override
-        public int getRowCount() {
-            return (data != null) ? data.length : 0;
-        }
-
-        @Override
-        public int getColumnCount() {
-            return columnNames.length;
-        }
-
-        @Override
-        public String getColumnName(int col) {
-            return columnNames[col];
-        }
-
-        @Override
-        public Class getColumnClass(int c) {
-            return getValueAt(0, c).getClass();
-        }
-
-        @Override
-        public Object getValueAt(int row, int col) {
-            return data[row][col];
-        }
-
-        @Override
-        public void setValueAt(Object value, int row, int col) {
-            data[row][col] = value;
-            fireTableCellUpdated(row, col);
-        }
+        private String name;
+        private int supId;
+        private double price;
+        private int sales;
+        private int total;
 
     }
 
@@ -441,52 +409,148 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
         );
     }
 
-    @Override
-    public void rowSetChanged(RowSetEvent event) {
-
-    }
-
-    public void rowChanged(RowSetEvent event) {
-
-//    CachedRowSet currentRowSet = this.myCoffeesTableModel.coffeesRowSet;
-//
-//    try {
-//      currentRowSet.moveToCurrentRow();
-//      myCoffeesTableModel =
-//        new CoffeesTableModel(myCoffeesTableModel.getCoffeesRowSet());
-//      table.setModel(myCoffeesTableModel);
-//
-//    } catch (SQLException ex) {
-//
-//      ex.printStackTrace();
-//
-//      // Display the error in a dialog box.
-//
-//      JOptionPane.showMessageDialog(
-//        CoffeesFrame.this,
-//        new String[] { // Display a 2-line message
-//          ex.getClass().getName() + ": ",
-//          ex.getMessage()
-//        }
-//      );
-//    }
-
-    }
-
-    @SuppressWarnings({"unused", "FieldCanBeLocal"})
+    @SuppressWarnings({"unused", "FieldCanBeLocal", "rawTypes"})
     @Getter
-    private class CoffeeTable extends JTable {
-        private CoffeesTableModel model;
+    private class CoffeesTableModel extends AbstractTableModel {
 
-        public CoffeeTable(TableModel dm) {
-            super(dm);
+        private String[] columnNames = {"COF_NAME", "SUP_ID", "PRICE", "SALES", "TOTAL"};
+        private List<Coffee> data = new LinkedList<>();
+        private int numOfRow;
+
+//        private Object[][] data2 = {
+//            {"Colombian", 101, 7.99, 0, 0},
+//            {"Colombian_Decaf", 101, 8.99, 0, 0},
+//            {"Espresso", 150, 9.99, 0, 0},
+//            {"French_Roast", 49, 8.99, 0, 0},
+//            {"French_Roast_Decaf", 49, 9.99, 0, 0}
+//        };
+
+        private CoffeesTableModel() {
+            super();
+//            data.add(new Coffee("Colombian", 101, 7.99, 0, 0));
+//            data.add(new Coffee("Colombian_Decaf", 101, 8.99, 0, 0));
+//            data.add(new Coffee("Espresso", 150, 9.99, 0, 0));
+//            data.add(new Coffee("French_Roast", 49, 8.99, 0, 0));
+//            data.add(new Coffee("French_Roast_Decaf", 49, 9.99, 0, 0));
+            try {
+                String host = System.getenv("DNS_MONGODB");
+
+                uri = new MongoClientURI("mongodb://onlyu:kinlove32@" + host + ":27097/?authSource=coffee-shop&ssl=false&authMode=scram-sha1");
+                client = new MongoClient(uri);
+                Thread.sleep(1500);
+
+//                client = new MongoClient(host , 27097);
+//                credential = MongoCredential.createCredential("onlyu", "coffee-shop", "kinlove32".toCharArray());
+
+                database = client.getDatabase("coffee-shop");
+//                database.createCollection("coffees", null);
+                collection = database.getCollection("coffees");
+                FindIterable<Document> documents = collection.find();
+
+                System.out.println("Retrieving documents...");
+                for (Document document : documents) {
+                    Coffee coffee = toCoffee(document);
+                    data.add(coffee);
+                }
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            numOfRow = data.size();
         }
 
-        public CoffeeTable(CoffeesTableModel dm) {
-            super(dm);
-            this.model = dm;
+        private void insertRow(String name, String supId, String price, String sales, String total) {
+            data.add(new Coffee(name, Integer.parseInt(supId), Double.parseDouble(price), Integer.parseInt(sales), Integer.parseInt(total)));
+            setValueAt(name, data.size() - 1, 0);
+            setValueAt(supId, data.size() - 1, 1);
+            setValueAt(price, data.size() - 1, 2);
+            setValueAt(sales, data.size() - 1, 3);
+            setValueAt(total, data.size() - 1, 4);
+            numOfRow++;
+            fireTableDataChanged();
         }
+
+        public void insertRow(Coffee coffee) {
+            data.add(coffee);
+            setValueAt(coffee.name, data.size() - 1, 0);
+            setValueAt(coffee.supId, data.size() - 1, 1);
+            setValueAt(coffee.price, data.size() - 1, 2);
+            setValueAt(coffee.sales, data.size() - 1, 3);
+            setValueAt(coffee.total, data.size() - 1, 4);
+            numOfRow++;
+        }
+
+        @Override
+        public boolean isCellEditable(int row, int col) {
+            return false;
+        }
+
+        @Override
+        public int getRowCount() {
+            return numOfRow;
+            //return data2.length;
+            //return (data != null) ? data.size() : 0;
+        }
+
+        @Override
+        public int getColumnCount() {
+            return 5;
+            //return columnNames.length;
+        }
+
+        @Override
+        public String getColumnName(int col) {
+            return columnNames[col];
+        }
+
+        @Override
+        public Class getColumnClass(int c) {
+            return getValueAt(0, c).getClass();
+        }
+
+        @Override
+        public Object getValueAt(int row, int col) {
+            Coffee coffee = data.get(row);
+            switch (col) {
+                case 0:
+                    return coffee.getName();
+                case 1:
+                    return coffee.getSupId();
+                case 2:
+                    return coffee.getPrice();
+                case 3:
+                    return coffee.getSales();
+                case 4:
+                    return coffee.getTotal();
+            }
+            return "";
+        }
+
+        @Override
+        public void setValueAt(Object value, int row, int col) {
+            Coffee coffee = data.get(row);
+            switch (col) {
+                case 0:
+                    coffee.setName((String) value);
+                    break;
+                case 1:
+                    coffee.setSupId(Integer.parseInt((String) value));
+                    break;
+                case 2:
+                    coffee.setPrice(Double.parseDouble((String) value));
+                    break;
+                case 3:
+                    coffee.setSales(Integer.parseInt((String) value));
+                    break;
+                case 4:
+                    coffee.setTotal(Integer.parseInt((String) value));
+                    break;
+            }
+            //data2[row][col] = value;
+            fireTableCellUpdated(row, col);
+        }
+
     }
-
 
 }

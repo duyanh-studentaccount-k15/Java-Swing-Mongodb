@@ -39,11 +39,12 @@ public class TestConnection {
 //                Arrays.asList(credential),
 //                options);
 
-        MongoClientURI uri = new MongoClientURI("mongodb://onlyu:kinlove32@localhost:27017/?authSource=coffee-shop&ssl=false");
+        MongoClientURI uri = new MongoClientURI("mongodb://onlyu:kinlove32@192.168.1.6:27097/?authSource=coffee-shop&ssl=false");
         MongoClient mongoClient = new MongoClient(uri);
         MongoDatabase database = mongoClient.getDatabase("coffee-shop");
+        //database.createCollection("coffees", null);
 
-        MongoCollection collection = database.getCollection("coffee");
+        MongoCollection collection = database.getCollection("coffees");
         long count = collection.countDocuments();
         if (count == 1) System.out.println("Success!");
 
