@@ -40,7 +40,8 @@ import lombok.*;
 import javax.sql.RowSetEvent;
 import javax.sql.RowSetListener;
 import javax.swing.*;
-import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -81,7 +82,7 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
             }
         });
 
-        table = new JTable(new CoffeesTableModel()); // Displays the table
+        final CoffeeTable table = new CoffeeTable(new CoffeesTableModel()); // Displays the table
 
         label_COF_NAME = new JLabel();
         label_SUP_ID = new JLabel();
@@ -265,16 +266,16 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
                                 "Total: [" + textField_TOTAL.getText() + "]"});
 
 
-//          try {
-//
-//            myCoffeesTableModel.insertRow(textField_COF_NAME.getText(),
-//                                          Integer.parseInt(textField_SUP_ID.getText().trim()),
-//                                          Float.parseFloat(textField_PRICE.getText().trim()),
-//                                          Integer.parseInt(textField_SALES.getText().trim()),
-//                                          Integer.parseInt(textField_TOTAL.getText().trim()));
-//          } catch (SQLException sqle) {
-//            displaySQLExceptionDialog(sqle);
-//          }
+                try {
+
+                    table.getModel().insertRow(textField_COF_NAME.getText(),
+                            Integer.parseInt(textField_SUP_ID.getText().trim()),
+                            Double.parseDouble(textField_PRICE.getText().trim()),
+                            Integer.parseInt(textField_SALES.getText().trim()),
+                            Double.parseDouble(textField_TOTAL.getText().trim()));
+                } catch (Exception e1) {
+                    e1.printStackTrace();
+                }
             }
         });
 
@@ -341,19 +342,37 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
 
     @SuppressWarnings({"unused", "FieldCanBeLocal"})
     @Getter
-    private class CoffeesTableModel extends AbstractTableModel {
+    private class CoffeesTableModel extends DefaultTableModel {
 
         private boolean DEBUG = false;
         private String[] columnNames = {"COF_NAME", "SUP_ID", "PRICE", "SALES", "TOTAL"};
 
-
         private Object[][] data = {
-                {"Colombian", 101, 7.99, 0, 0},
-                {"Colombian_Decaf", 101, 8.99, 0, 0},
-                {"Espresso", 150, 9.99, 0, 0},
-                {"French_Roast", 49, 8.99, 0, 0},
-                {"French_Roast_Decaf", 49, 9.99, 0, 0}
+//                {"Colombian", 101, 7.99, 0, 0},
+//                {"Colombian_Decaf", 101, 8.99, 0, 0},
+//                {"Espresso", 150, 9.99, 0, 0},
+//                {"French_Roast", 49, 8.99, 0, 0},
+//                {"French_Roast_Decaf", 49, 9.99, 0, 0}
         };
+
+        public void insertRow(String name, int supId, double price, int sales, double total) {
+            data[getRowCount()][0] = name;
+            data[getRowCount()][1] = supId;
+            data[getRowCount()][2] = price;
+            data[getRowCount()][3] = sales;
+            data[getRowCount()][4] = total;
+            for (int i = 0; i < 5; i++) {
+                fireTableCellUpdated(getRowCount(), i);
+            }
+        }
+
+        public void insertRow(Coffee coffee) {
+            setValueAt(coffee.getName(), getRowCount(), 0);
+            setValueAt(coffee.getSupId(), getRowCount(), 1);
+            setValueAt(coffee.getPrice(), getRowCount(), 2);
+            setValueAt(coffee.getSales(), getRowCount(), 3);
+            setValueAt(coffee.getTotal(), getRowCount(), 4);
+        }
 
         @Override
         public boolean isCellEditable(int row, int col) {
@@ -362,7 +381,7 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
 
         @Override
         public int getRowCount() {
-            return data.length;
+            return (data != null) ? data.length : 0;
         }
 
         @Override
@@ -387,33 +406,8 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
 
         @Override
         public void setValueAt(Object value, int row, int col) {
-            if (DEBUG) {
-                System.out.println("Setting value at " + row + "," + col
-                        + " to " + value + " (an instance of "
-                        + value.getClass() + ")");
-            }
-
             data[row][col] = value;
             fireTableCellUpdated(row, col);
-
-            if (DEBUG) {
-                System.out.println("New value of data:");
-                printDebugData();
-            }
-        }
-
-        private void printDebugData() {
-            int numRows = getRowCount();
-            int numCols = getColumnCount();
-
-            for (int i = 0; i < numRows; i++) {
-                System.out.print("    row " + i + ":");
-                for (int j = 0; j < numCols; j++) {
-                    System.out.print("  " + data[i][j]);
-                }
-                System.out.println();
-            }
-            System.out.println("--------------------------");
         }
 
     }
@@ -477,6 +471,21 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
 //      );
 //    }
 
+    }
+
+    @SuppressWarnings({"unused", "FieldCanBeLocal"})
+    @Getter
+    private class CoffeeTable extends JTable {
+        private CoffeesTableModel model;
+
+        public CoffeeTable(TableModel dm) {
+            super(dm);
+        }
+
+        public CoffeeTable(CoffeesTableModel dm) {
+            super(dm);
+            this.model = dm;
+        }
     }
 
 
