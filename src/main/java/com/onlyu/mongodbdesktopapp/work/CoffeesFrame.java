@@ -35,10 +35,12 @@ import com.mongodb.MongoClient;
 import com.mongodb.MongoClientURI;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import lombok.*;
 
 import javax.sql.RowSetEvent;
 import javax.sql.RowSetListener;
 import javax.swing.*;
+import javax.swing.table.AbstractTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -50,25 +52,7 @@ import java.sql.SQLException;
 @SuppressWarnings({"unused", "FieldCanBeLocal"})
 public class CoffeesFrame extends JFrame implements RowSetListener {
 
-    private MongoClient mongoClient;
-    private MongoDatabase database;
-    private MongoCollection collection;
-    private JTable table; // The table for displaying data
-    private JLabel label_COF_NAME;
-    private JLabel label_SUP_ID;
-    private JLabel label_PRICE;
-    private JLabel label_SALES;
-    private JLabel label_TOTAL;
-    private JTextField textField_COF_NAME;
-    private JTextField textField_SUP_ID;
-    private JTextField textField_PRICE;
-    private JTextField textField_SALES;
-    private JTextField textField_TOTAL;
-    private JButton button_ADD_ROW;
-    private JButton button_UPDATE_DATABASE;
-    private JButton button_DISCARD_CHANGES;
-
-    public CoffeesFrame() {
+    private CoffeesFrame() {
 
         super("The Coffee Break: 'coffee' Table"); // Set window title
         setDefaultLookAndFeelDecorated(true);
@@ -320,6 +304,118 @@ public class CoffeesFrame extends JFrame implements RowSetListener {
 //                }
             }
         });
+    }
+
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @ToString
+    private class Coffee {
+
+        private String name;
+        private int supId;
+        private double price;
+        private int sales;
+        private double total;
+
+    }
+
+    private MongoClient mongoClient;
+    private MongoDatabase database;
+    private MongoCollection collection;
+    private JTable table; // The table for displaying data
+    private JLabel label_COF_NAME;
+    private JLabel label_SUP_ID;
+    private JLabel label_PRICE;
+    private JLabel label_SALES;
+    private JLabel label_TOTAL;
+    private JTextField textField_COF_NAME;
+    private JTextField textField_SUP_ID;
+    private JTextField textField_PRICE;
+    private JTextField textField_SALES;
+    private JTextField textField_TOTAL;
+    private JButton button_ADD_ROW;
+    private JButton button_UPDATE_DATABASE;
+    private JButton button_DISCARD_CHANGES;
+
+    @SuppressWarnings({"unused", "FieldCanBeLocal"})
+    @Getter
+    private class CoffeesTableModel extends AbstractTableModel {
+
+        private boolean DEBUG = false;
+        private String[] columnNames = {"COF_NAME", "SUP_ID", "PRICE", "SALES", "TOTAL"};
+
+
+        private Object[][] data = {
+                {"Colombian", 101, 7.99, 0, 0},
+                {"Colombian_Decaf", 101, 8.99, 0, 0},
+                {"Espresso", 150, 9.99, 0, 0},
+                {"French_Roast", 49, 8.99, 0, 0},
+                {"French_Roast_Decaf", 49, 9.99, 0, 0}
+        };
+
+        @Override
+        public boolean isCellEditable(int row, int col) {
+            return col >= 2;
+        }
+
+        @Override
+        public int getRowCount() {
+            return data.length;
+        }
+
+        @Override
+        public int getColumnCount() {
+            return columnNames.length;
+        }
+
+        @Override
+        public String getColumnName(int col) {
+            return columnNames[col];
+        }
+
+        @Override
+        public Class getColumnClass(int c) {
+            return getValueAt(0, c).getClass();
+        }
+
+        @Override
+        public Object getValueAt(int row, int col) {
+            return data[row][col];
+        }
+
+        @Override
+        public void setValueAt(Object value, int row, int col) {
+            if (DEBUG) {
+                System.out.println("Setting value at " + row + "," + col
+                        + " to " + value + " (an instance of "
+                        + value.getClass() + ")");
+            }
+
+            data[row][col] = value;
+            fireTableCellUpdated(row, col);
+
+            if (DEBUG) {
+                System.out.println("New value of data:");
+                printDebugData();
+            }
+        }
+
+        private void printDebugData() {
+            int numRows = getRowCount();
+            int numCols = getColumnCount();
+
+            for (int i = 0; i < numRows; i++) {
+                System.out.print("    row " + i + ":");
+                for (int j = 0; j < numCols; j++) {
+                    System.out.print("  " + data[i][j]);
+                }
+                System.out.println();
+            }
+            System.out.println("--------------------------");
+        }
+
     }
 
     public static void main(String[] args) {
